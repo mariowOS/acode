@@ -1,1 +1,608 @@
-test...
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs/loader.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: rgba(18, 22, 32, 0.85);
+            --sidebar-bg: rgba(10, 14, 22, 0.5);
+            --text-color: #ffffff;
+            --accent-color: #5c7cfa;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --menu-hover: rgba(255, 255, 255, 0.15);
+        }
+        body, html {
+            margin: 0; padding: 0; height: 100%;
+            font-family: 'Poppins', sans-serif;
+            background-color: transparent; color: var(--text-color);
+            display: flex; flex-direction: column; overflow: hidden;
+            user-select: none; 
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
+
+        .menubar {
+            height: 36px; background: rgba(0, 0, 0, 0.3); border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; padding: 0 16px; gap: 16px;
+        }
+        .app-title { font-weight: 600; font-size: 13px; color: var(--accent-color); margin-right: 10px; display: flex; align-items: center; gap: 6px; }
+        .menu-item { font-size: 12px; font-weight: 500; padding: 4px 10px; border-radius: 6px; cursor: pointer; position: relative; transition: background 0.15s; }
+        .menu-item:hover { background: var(--menu-hover); }
+
+        .main-container { display: flex; flex: 1; height: calc(100% - 36px); transition: height 0.2s; }
+        
+        .sidebar {
+            width: 250px; background: var(--sidebar-bg); border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; flex-shrink: 0;
+        }
+        .sidebar-header {
+            padding: 12px; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.5); letter-spacing: 0.5px;
+            display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color);
+        }
+        .sidebar-actions span { cursor: pointer; transition: color 0.15s; }
+        .sidebar-actions span:hover { color: #fff; }
+        
+        .file-tree { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+        
+        .tree-node { display: flex; flex-direction: column; }
+        .tree-item {
+            padding: 6px 8px; cursor: pointer; border-radius: 6px; font-size: 12.5px;
+            display: flex; align-items: center; gap: 8px; color: #ddd; transition: background 0.1s;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .tree-item:hover { background: rgba(255, 255, 255, 0.08); }
+        .tree-item.active { background: color-mix(in srgb, var(--accent-color) 35%, transparent); color: #fff; font-weight: 500; }
+        .tree-children { padding-left: 14px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid rgba(255,255,255,0.05); margin-left: 14px; }
+        
+        .inline-input {
+            background: rgba(0,0,0,0.5); border: 1px solid var(--accent-color); color: #fff;
+            font-family: inherit; font-size: 12px; padding: 2px 6px; border-radius: 4px; outline: none; width: 100%;
+        }
+
+        .editor-wrapper { flex: 1; position: relative; background: transparent; min-width: 0; }
+        #monaco-container { width: 100%; height: 100%; }
+        .empty-state {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex;
+            align-items: center; justify-content: center; flex-direction: column; color: rgba(255,255,255,0.3); pointer-events: none;
+        }
+
+        #context-menu {
+            display: none; position: fixed; z-index: 10000;
+            background: rgba(24, 25, 28, 0.65); backdrop-filter: blur(30px) saturate(200%);
+            -webkit-backdrop-filter: blur(30px) saturate(200%); border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px; padding: 6px; min-width: 160px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            flex-direction: column; gap: 2px;
+        }
+        .ctx-item {
+            display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+            font-size: 12px; font-weight: 500; color: #fff; border-radius: 8px; cursor: pointer;
+        }
+        .ctx-item:hover { background: rgba(255, 255, 255, 0.15); }
+        .ctx-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0; }
+    </style>
+</head>
+<body>
+
+    <div class="menubar" id="fallback-menubar">
+        <div class="app-title"><span class="material-symbols-outlined" style="font-size: 18px;">code</span> ACode</div>
+    </div>
+
+    <div class="main-container" id="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                EXPLORER
+                <div class="sidebar-actions">
+                    <span class="material-symbols-outlined" style="font-size: 16px;" onclick="promptCreateProject()" title="New Project">create_new_folder</span>
+                </div>
+            </div>
+            <div class="file-tree" id="fileTree"></div>
+        </div>
+        
+        <div class="editor-wrapper">
+            <div class="empty-state" id="emptyState">
+                <h2>what's cooking, good looking?</h2>
+            </div>
+            <div id="monaco-container" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div id="context-menu">
+        <div class="ctx-item" id="ctx-new-file"><span class="material-symbols-outlined" style="font-size:16px;">note_add</span> New File</div>
+        <div class="ctx-item" id="ctx-new-folder"><span class="material-symbols-outlined" style="font-size:16px;">create_new_folder</span> New Folder</div>
+        <div class="ctx-divider" id="ctx-div-1"></div>
+        <div class="ctx-item" id="ctx-rename"><span class="material-symbols-outlined" style="font-size:16px;">edit</span> Rename</div>
+        <div class="ctx-item" id="ctx-delete" style="color: #ff5252;"><span class="material-symbols-outlined" style="font-size:16px;">delete</span> Delete</div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item" id="ctx-export"><span class="material-symbols-outlined" style="font-size:16px;">folder_zip</span> Export (.zip)</div>
+    </div>
+
+    <script>
+        const DEFAULT_TEMPLATE = `<!--
+Welcome to the mariowOS ACode Application! This template is designed to help you get started with building your own applications using HTML, CSS, and JavaScript.
+
+1. UI & WINDOW MANAGEMENT:
+- The window frame, dragging, minimize, maximize, and close buttons
+ are automatically managed by Tiles.
+- Set body background to 'transparent' to inherit the system's
+ acrylic/blur effects.
+- Recommended Font: 'Poppins' (already imported).
+- Primary Accent Color: #5c7cfa (matches system M3 accent).
+
+2. FILE STRUCTURE:
+- Projects are modular. You can use the 'assets' folder for logic
+ or additional styling, more windows etc...
+- Code Studio Run Engine automatically resolves local CSS and JS files (<style and <script>)
+ linked in this HTML during runtime preview!
+
+3. SYSTEM APIs & HARDWARE (Node.js backend):
+- Wi-Fi: fetch('/api/system/networks')
+- Bluetooth: fetch('/api/system/bt-devices')
+- Volume/Power: Check /api/system/quick-settings
+- Ethernet: fetch('/api/system/ethernet-stats')
+       
+4. SYSTEM INTEGRATION (IPC & Global functions):
+- Notifications: window.parent.showNotification("Title", "Msg", "Icon")
+- Maximize window: window.parent.toggleMaximize('your_popup_id')
+- Close window: window.parent.closePopup('your_popup_id')
+- Media Controls: window.parent.sendMediaCommand('toggle')
+
+Have fun from mariow :D
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0; padding: 24px; font-family: 'Poppins', sans-serif;
+            color: #ffffff; background-color: transparent; 
+        }
+        h1 { font-weight: 500; margin-top: 0; color: #5c7cfa; }
+    </style>
+</head>
+<body>
+        <h1>Welcome to your app</h1>
+        <p>This is a simple example of an app.</p>
+    </div>
+</body>
+</html>`;
+
+        let fileSystem = JSON.parse(localStorage.getItem('mariowOS_fs')) || {};
+        for (let proj in fileSystem) {
+            if (typeof fileSystem[proj] === 'string') { fileSystem = {}; break; }
+        }
+
+        let currentFilePath = null; 
+        let editor;
+        let saveTimeout; // Per l'ottimizzazione Runtime (Debounce)
+        const IS_EMBEDDED = window.parent !== window;
+        let ctxTarget = null; 
+
+        // Init Monaco Editor
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.36.1/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            editor = monaco.editor.create(document.getElementById('monaco-container'), {
+                value: "", language: "html", theme: "vs-dark", automaticLayout: true,
+                minimap: { enabled: false }, fontSize: 13, fontFamily: "'Consolas', 'Courier New', monospace",
+                scrollBeyondLastLine: false, padding: { top: 16 }
+            });
+            
+            // Runtime Optimization: Debounced Auto-Save per ridurre l'I/O su LocalStorage
+            editor.onDidChangeModelContent(() => {
+                clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(() => {
+                    if(currentFilePath) {
+                        setNodeContent(currentFilePath, editor.getValue());
+                        saveFS();
+                    }
+                }, 800);
+            });
+        });
+
+        // --- File System Utilities ---
+        function saveFS() { localStorage.setItem('mariowOS_fs', JSON.stringify(fileSystem)); }
+        
+        function getNode(pathArr) {
+            let curr = fileSystem;
+            for(let p of pathArr) {
+                if(curr[p] === undefined) return null;
+                curr = curr[p];
+            }
+            return curr;
+        }
+
+        function setNodeContent(pathArr, content) {
+            if(pathArr.length === 0) return;
+            let parent = fileSystem;
+            for(let i=0; i<pathArr.length-1; i++) parent = parent[pathArr[i]];
+            parent[pathArr[pathArr.length-1]] = content;
+        }
+
+        function deleteNode(pathArr) {
+            if(pathArr.length === 0) return;
+            let parent = fileSystem;
+            for(let i=0; i<pathArr.length-1; i++) parent = parent[pathArr[i]];
+            delete parent[pathArr[pathArr.length-1]];
+            saveFS();
+        }
+
+        function renameNode(pathArr, newName) {
+            if(pathArr.length === 0) return;
+            let parent = fileSystem;
+            for(let i=0; i<pathArr.length-1; i++) parent = parent[pathArr[i]];
+            
+            const oldName = pathArr[pathArr.length-1];
+            if(oldName !== newName && parent[newName] === undefined) {
+                parent[newName] = parent[oldName];
+                delete parent[oldName];
+                saveFS();
+                return true;
+            }
+            return false;
+        }
+
+        // --- UI & Rendering ---
+        function renderTree() {
+            const tree = document.getElementById('fileTree');
+            tree.innerHTML = '';
+            for (const projectName in fileSystem) {
+                tree.appendChild(createTreeNode([projectName]));
+            }
+        }
+
+        function createTreeNode(pathArr) {
+            const nodeName = pathArr[pathArr.length-1];
+            const nodeData = getNode(pathArr);
+            const isFolder = typeof nodeData === 'object';
+            
+            const container = document.createElement('div');
+            container.className = 'tree-node';
+            
+            const item = document.createElement('div');
+            let isActive = false;
+            if(currentFilePath && currentFilePath.join('/') === pathArr.join('/')) isActive = true;
+            item.className = 'tree-item' + (isActive ? ' active' : '');
+            
+            let icon = isFolder ? (pathArr.length === 1 ? 'folder_open' : 'folder') : 'description';
+            if(!isFolder) {
+                if(nodeName.endsWith('.html')) icon = 'html';
+                if(nodeName.endsWith('.css')) icon = 'css';
+                if(nodeName.endsWith('.js')) icon = 'javascript';
+                if(nodeName.endsWith('.json')) icon = 'data_object';
+            }
+            
+            item.innerHTML = `<span class="material-symbols-outlined" style="font-size:${isFolder?'16px':'14px'};">${icon}</span> <span>${nodeName}</span>`;
+            
+            item.onclick = (e) => {
+                e.stopPropagation();
+                if(isFolder) {
+                    const childrenDiv = container.querySelector('.tree-children');
+                    if(childrenDiv) childrenDiv.style.display = childrenDiv.style.display === 'none' ? 'flex' : 'none';
+                } else {
+                    openFile(pathArr);
+                }
+            };
+            
+            item.oncontextmenu = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                showContextMenu(e, pathArr, isFolder);
+            };
+
+            container.appendChild(item);
+
+            if (isFolder) {
+                const childrenDiv = document.createElement('div');
+                childrenDiv.className = 'tree-children';
+                for (const childName in nodeData) {
+                    childrenDiv.appendChild(createTreeNode([...pathArr, childName]));
+                }
+                container.appendChild(childrenDiv);
+            }
+            return container;
+        }
+
+        function openFile(pathArr) {
+            currentFilePath = [...pathArr];
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('monaco-container').style.display = 'block';
+            
+            const fileName = pathArr[pathArr.length-1];
+            let lang = 'html';
+            if(fileName.endsWith('.css')) lang = 'css';
+            if(fileName.endsWith('.js')) lang = 'javascript';
+            if(fileName.endsWith('.json')) lang = 'json';
+
+            monaco.editor.setModelLanguage(editor.getModel(), lang);
+            editor.setValue(getNode(pathArr) || "");
+            renderTree();
+        }
+
+        // --- Context Menu Actions ---
+        const ctxMenu = document.getElementById('context-menu');
+        
+        function showContextMenu(e, pathArr, isFolder) {
+            ctxTarget = { pathArr, isFolder };
+            ctxMenu.style.display = 'flex';
+            
+            let x = e.clientX; let y = e.clientY;
+            if (x + 160 > window.innerWidth) x = window.innerWidth - 160;
+            if (y + 180 > window.innerHeight) y = window.innerHeight - 180;
+            ctxMenu.style.left = `${x}px`;
+            ctxMenu.style.top = `${y}px`;
+
+            document.getElementById('ctx-new-file').style.display = isFolder ? 'flex' : 'none';
+            document.getElementById('ctx-new-folder').style.display = isFolder ? 'flex' : 'none';
+            document.getElementById('ctx-div-1').style.display = isFolder ? 'block' : 'none';
+        }
+
+        document.addEventListener('click', () => { ctxMenu.style.display = 'none'; });
+
+        document.getElementById('ctx-new-file').onclick = () => promptCreateNode(false);
+        document.getElementById('ctx-new-folder').onclick = () => promptCreateNode(true);
+        document.getElementById('ctx-rename').onclick = () => promptRename();
+        document.getElementById('ctx-delete').onclick = () => {
+            if(confirm(`Are you sure you want to delete '${ctxTarget.pathArr[ctxTarget.pathArr.length-1]}'?`)) {
+                deleteNode(ctxTarget.pathArr);
+                if(currentFilePath && currentFilePath.join('/').startsWith(ctxTarget.pathArr.join('/'))) {
+                    currentFilePath = null;
+                    document.getElementById('emptyState').style.display = 'flex';
+                    document.getElementById('monaco-container').style.display = 'none';
+                }
+                renderTree();
+            }
+        };
+        document.getElementById('ctx-export').onclick = () => exportZipPath(ctxTarget.pathArr);
+
+
+        function promptCreateProject() {
+            const name = prompt("Enter Project Name:");
+            if (name && !fileSystem[name]) {
+                fileSystem[name] = { 
+                    'index.html': DEFAULT_TEMPLATE, 
+                    'assets': {} 
+                };
+                saveFS(); renderTree(); openFile([name, 'index.html']);
+            }
+        }
+
+        function promptCreateNode(isFolder) {
+            const name = prompt(`Enter ${isFolder ? 'folder' : 'file'} name:`);
+            if (name) {
+                const targetNode = getNode(ctxTarget.pathArr);
+                if(targetNode[name] === undefined) {
+                    targetNode[name] = isFolder ? {} : "";
+                    saveFS(); renderTree();
+                    if(!isFolder) openFile([...ctxTarget.pathArr, name]);
+                }
+            }
+        }
+
+        function promptRename() {
+            const oldName = ctxTarget.pathArr[ctxTarget.pathArr.length-1];
+            const newName = prompt("Rename to:", oldName);
+            if(newName && newName !== oldName) {
+                if(renameNode(ctxTarget.pathArr, newName)) {
+                    if(currentFilePath) {
+                        const pathStr = currentFilePath.join('/');
+                        const oldPathStr = ctxTarget.pathArr.join('/');
+                        if(pathStr.startsWith(oldPathStr)) {
+                            currentFilePath[ctxTarget.pathArr.length-1] = newName;
+                        }
+                    }
+                    renderTree();
+                } else {
+                    if (window.parent && window.parent.showNotification) window.parent.showNotification("Error", "Name already exists.", "⚠️");
+                }
+            }
+        }
+
+        // --- Export & Run ---
+        async function exportZipPath(pathArr) {
+            const zip = new JSZip();
+            const rootNode = getNode(pathArr);
+            const exportName = pathArr[pathArr.length-1];
+            
+            function addToZip(folderObj, nodeData) {
+                if(typeof nodeData === 'string') return; 
+                for (const key in nodeData) {
+                    if (typeof nodeData[key] === 'string') {
+                        folderObj.file(key, nodeData[key]);
+                    } else {
+                        addToZip(folderObj.folder(key), nodeData[key]);
+                    }
+                }
+            }
+
+            if(typeof rootNode === 'string') {
+                zip.file(exportName, rootNode); 
+            } else {
+                addToZip(zip, rootNode); 
+            }
+            
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(content);
+                a.download = exportName + ".zip"; a.click();
+            });
+        }
+
+        function testApp() {
+            if (!currentFilePath) { 
+                if (window.parent && window.parent.showNotification) window.parent.showNotification("Error", "Open a project file first.", "⚠️");
+                return; 
+            }
+            
+            const projectRootName = currentFilePath[0];
+            const projectRoot = fileSystem[projectRootName];
+            
+            if (!projectRoot['index.html']) {
+                if (window.parent && window.parent.showNotification) window.parent.showNotification("Error", "Missing index.html to run.", "⚠️");
+                return;
+            }
+            
+            if (editor && currentFilePath) {
+                setNodeContent(currentFilePath, editor.getValue());
+                saveFS();
+            }
+            
+            let htmlCode = projectRoot['index.html'];
+            
+            // Algoritmo ricorsivo di risoluzione delle dependencies
+            function resolveDependencies(folder, pathPrefix = "") {
+                for(const filename in folder) {
+                    if(typeof folder[filename] === 'object') {
+                        resolveDependencies(folder[filename], pathPrefix + filename + "/");
+                    } else {
+                        const fullPath = pathPrefix + filename;
+                        if (filename.endsWith('.css')) {
+                            const linkTag = new RegExp(`<link[^>]*href=["']${fullPath}["'][^>]*>`, 'gi');
+                            htmlCode = htmlCode.replace(linkTag, `<style>${folder[filename]}</style>`);
+                        }
+                        if (filename.endsWith('.js')) {
+                            const scriptTag = new RegExp(`<script[^>]*src=["']${fullPath}["'][^>]*><\\/script>`, 'gi');
+                            htmlCode = htmlCode.replace(scriptTag, `<script>${folder[filename]}<\/script>`);
+                        }
+                    }
+                }
+            }
+            resolveDependencies(projectRoot);
+
+            const blob = new Blob([htmlCode], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            
+            const popupId = 'mariowos_ide_preview_window';
+            const parentDoc = window.parent.document;
+            let popupDiv = parentDoc.getElementById(popupId);
+            
+            if (!popupDiv) {
+                popupDiv = parentDoc.createElement("div");
+                popupDiv.id = popupId; popupDiv.className = "popup"; 
+                popupDiv.innerHTML = `
+                    <div class="popup-header">
+                        <span>🧪 Preview: ${projectRootName}</span>
+                        <div class="window-actions">
+                            <span class="material-symbols-outlined action-btn min-btn" onclick="minimizePopup('${popupId}')">remove</span>
+                            <span class="material-symbols-outlined action-btn max-btn" onclick="toggleMaximize('${popupId}')">crop_square</span>
+                            <span class="material-symbols-outlined action-btn close-btn" onclick="closePopup('${popupId}')">close</span>
+                        </div>
+                    </div>
+                    <div class="popup-glass" onclick="focusPopup(this.parentElement)"></div>
+                    <iframe data-default-src="${url}" src="${url}" class="popup-frame" style="background: transparent;" allow="autoplay; camera; microphone"></iframe>
+                `;
+                parentDoc.body.appendChild(popupDiv);
+                void popupDiv.offsetWidth; 
+            } else {
+                const headerSpan = popupDiv.querySelector('.popup-header span');
+                if (headerSpan) headerSpan.innerText = '🧪 Preview: ' + projectRootName;
+                const iframe = popupDiv.querySelector('iframe');
+                if (iframe) { iframe.dataset.defaultSrc = url; iframe.src = url; }
+            }
+            
+            window.parent.openPopup(popupId);
+            window.parent.focusPopup(popupDiv);
+        }
+
+        // --- OS Injection ---
+        if (IS_EMBEDDED) {
+            document.getElementById('fallback-menubar').style.display = 'none';
+            document.getElementById('main-container').style.height = '100%';
+
+            const iframes = window.parent.document.querySelectorAll('iframe');
+            let myPopupId = null, myPopupEl = null;
+
+            iframes.forEach(iframe => {
+                if (iframe.contentWindow === window) {
+                    myPopupEl = iframe.closest('.popup');
+                    if(myPopupEl) myPopupId = myPopupEl.id;
+                }
+            });
+
+            if (myPopupEl && myPopupId) {
+                const osHeader = myPopupEl.querySelector('.popup-header');
+
+                if (!window.parent.document.getElementById('codestudio-os-styles')) {
+                    const style = window.parent.document.createElement('style');
+                    style.id = 'codestudio-os-styles';
+                    style.textContent = `
+                        .cs-os-btn {
+                            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+                            color: #ddd; border-radius: 6px; padding: 4px 10px; display: flex; align-items: center; gap: 6px;
+                            cursor: pointer; transition: all 0.2s; font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 500;
+                        }
+                        .cs-os-btn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; transform: translateY(-1px); }
+                        .cs-os-btn:active { transform: translateY(1px); }
+                        .cs-os-btn.primary { background: rgba(92, 124, 250, 0.2); color: #c2f3eb; border-color: rgba(92, 124, 250, 0.3); }
+                        .cs-os-btn.primary:hover { background: rgba(92, 124, 250, 0.4); color: #fff; }
+                    `;
+                    window.parent.document.head.appendChild(style);
+                }
+
+                // Iniezione fedele della Option Bar sulla Window Bar del sistema
+                osHeader.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px; color: #5c7cfa; cursor: move; padding-right: 12px; border-right: 1px solid rgba(255,255,255,0.1);">
+                        <span class="material-symbols-outlined" style="font-size: 18px;">code</span>
+                        <span style="font-weight: 600; white-space: nowrap;">ACode</span>
+                    </div>
+                    
+                    <div style="display: flex; gap: 6px; flex: 1; margin-left: 12px; align-items: center; cursor: move; overflow-x: auto;">
+                        <button class="cs-os-btn" id="os-cs-new-proj" title="New Project"><span class="material-symbols-outlined" style="font-size: 14px;">create_new_folder</span></button>
+                        <button class="cs-os-btn" id="os-cs-new-file" title="New File" onclick="document.getElementById('ctx-new-file').click()"><span class="material-symbols-outlined" style="font-size: 14px;">note_add</span></button>
+                        <div style="width: 1px; height: 16px; background: rgba(255,255,255,0.1); margin: 0 4px;"></div>
+                        <button class="cs-os-btn" id="os-cs-save" title="Save File (Ctrl+S)"><span class="material-symbols-outlined" style="font-size: 14px;">save</span> Save</button>
+                        <button class="cs-os-btn" id="os-cs-export" title="Export Project as .zip" onclick="document.getElementById('ctx-export').click()"><span class="material-symbols-outlined" style="font-size: 14px;">folder_zip</span> Export</button>
+                    </div>
+
+                    <div style="display: flex; gap: 8px; align-items: center; margin-right: 12px;">
+                        <button class="cs-os-btn primary" id="os-cs-run" title="Run/Preview App (Ctrl+Enter)">
+                            <span class="material-symbols-outlined" style="font-size: 14px;">play_arrow</span> Run App
+                        </button>
+                    </div>
+
+                    <div class="window-actions" style="flex-shrink: 0;">
+                        <span class="material-symbols-outlined action-btn min-btn" onclick="minimizePopup('${myPopupId}')">remove</span>
+                        <span class="material-symbols-outlined action-btn max-btn" onclick="toggleMaximize('${myPopupId}')">crop_square</span>
+                        <span class="material-symbols-outlined action-btn close-btn" onclick="closePopup('${myPopupId}')">close</span>
+                    </div>
+                `;
+
+                const pDoc = window.parent.document;
+                pDoc.getElementById('os-cs-new-proj').addEventListener('click', () => promptCreateProject());
+                pDoc.getElementById('os-cs-save').addEventListener('click', () => {
+                    if (editor && currentFilePath) {
+                        setNodeContent(currentFilePath, editor.getValue());
+                        saveFS();
+                        window.parent.showNotification("Code Studio", "File saved successfully.", "💾");
+                    }
+                });
+                pDoc.getElementById('os-cs-run').addEventListener('click', () => testApp());
+            }
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 's') { 
+                e.preventDefault(); 
+                if(editor && currentFilePath) { 
+                    setNodeContent(currentFilePath, editor.getValue()); 
+                    saveFS();
+                    if(IS_EMBEDDED && window.parent.showNotification) window.parent.showNotification("Code Studio", "Saved", "💾");
+                } 
+            }
+            if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); testApp(); }
+        });
+
+        renderTree();
+    </script>
+</body>
+</html>
