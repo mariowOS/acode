@@ -491,7 +491,7 @@ Have fun from mariow :D
                 popupDiv.id = popupId; popupDiv.className = "popup"; 
                 popupDiv.innerHTML = `
                     <div class="popup-header">
-                        <span>🧪 Preview: ${projectRootName}</span>
+                        <span>ACode Runtime preview: ${projectRootName}</span>
                         <div class="window-actions">
                             <span class="material-symbols-outlined action-btn min-btn" onclick="minimizePopup('${popupId}')">remove</span>
                             <span class="material-symbols-outlined action-btn max-btn" onclick="toggleMaximize('${popupId}')">crop_square</span>
@@ -505,7 +505,7 @@ Have fun from mariow :D
                 void popupDiv.offsetWidth; 
             } else {
                 const headerSpan = popupDiv.querySelector('.popup-header span');
-                if (headerSpan) headerSpan.innerText = '🧪 Preview: ' + projectRootName;
+                if (headerSpan) headerSpan.innerText = 'ACode Runtime preview: ' + projectRootName;
                 const iframe = popupDiv.querySelector('iframe');
                 if (iframe) { iframe.dataset.defaultSrc = url; iframe.src = url; }
             }
@@ -549,7 +549,6 @@ Have fun from mariow :D
                     window.parent.document.head.appendChild(style);
                 }
 
-                // Iniezione fedele della Option Bar sulla Window Bar del sistema
                 osHeader.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 8px; color: #5c7cfa; cursor: move; padding-right: 12px; border-right: 1px solid rgba(255,255,255,0.1);">
                         <span class="material-symbols-outlined" style="font-size: 18px;">code</span>
